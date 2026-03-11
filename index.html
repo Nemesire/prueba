@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MoneyGrowth - Personal Finance Hub</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0F172A" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'slate-900': '#0F172A', // Deep dark background
+              'slate-800': '#1E293B', // Card background
+              'slate-700': '#334155', // Borders, inputs
+              'slate-600': '#475569', // Subtle borders, dividers
+              'slate-500': '#64748B', // Muted text
+              'slate-400': '#94A3B8', // Secondary text
+              'slate-300': '#CBD5E1', // Primary text
+              'slate-200': '#E2E8F0', // Brighter text
+              'slate-100': '#F1F5F9', // Almost white
+              
+              'primary': '#22d3ee', // Electric Cyan
+              'primary-hover': '#06b6d4',
+              
+              'secondary': '#4ade80', // Neon Green (Success, Income)
+              
+              'danger': '#d946ef', // Vibrant Fuchsia (Expense, Danger)
+              
+              'accent': '#facc15', // Bright Yellow (Warnings, Alerts)
+
+              'info': '#3b82f6' // Sapphire Blue (Savings)
+            },
+          }
+        }
+      }
+    </script>
+    <style>
+      /* Hide scrollbar for Chrome, Safari and Opera */
+      .no-scrollbar::-webkit-scrollbar {
+          display: none;
+      }
+    
+      /* Hide scrollbar for IE, Edge and Firefox */
+      .no-scrollbar {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+      }
+    </style>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-slate-900 text-slate-300">
+    <div id="root"></div>
+
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for(let registration of registrations) {
+            registration.unregister();
+          }
+        });
+      }
+    </script>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
