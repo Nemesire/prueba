@@ -135,48 +135,36 @@ const DebtLiquidationView: React.FC<{
     onSortChange: (key: SortKeyType, dir: 'asc' | 'desc') => void;
     activeMethod: MethodType;
     onMethodChange: (method: MethodType) => void;
-    liquidationSimulationIds: Set<string>;
-    toggleLiquidationSimulation: (id: string) => void;
-    simulatedLiquidationIds: Set<string>;
-    toggleSimulatedLiquidation: (id: string) => void;
-}> = ({ credits, sortKey, sortDir, onSortChange, activeMethod, onMethodChange, liquidationSimulationIds, toggleLiquidationSimulation, simulatedLiquidationIds, toggleSimulatedLiquidation }) => {
+}> = ({ credits, sortKey, sortDir, onSortChange, activeMethod, onMethodChange }) => {
     
-    const [showLiquidated, setShowLiquidated] = useState(false);
+    // Access global simulated liquidation state
+    const { simulatedLiquidationIds, toggleSimulatedLiquidation } = useApp();
 
     const activeCredits = useMemo(() => {
-        const list = showLiquidated ? credits : credits.filter(c => calculateRemainingAmount(c) > 0);
+        const list = credits.filter(c => calculateRemainingAmount(c) > 0);
         return sortCredits(list, sortKey, sortDir, activeMethod);
-    }, [credits, sortKey, sortDir, activeMethod, showLiquidated]);
+    }, [credits, sortKey, sortDir, activeMethod]);
 
     const totals = useMemo(() => {
-        // Baseline: exclude globally liquidated credits
-        const baselineCredits = activeCredits.filter(c => !simulatedLiquidationIds.has(c.id));
-        
-        const totalQuota = baselineCredits.reduce((sum, c) => sum + c.monthlyPayment, 0);
-        const totalRemaining = baselineCredits.reduce((sum, c) => sum + calculateRemainingAmount(c), 0);
+        const totalQuota = activeCredits.reduce((sum, c) => sum + c.monthlyPayment, 0);
+        const totalRemaining = activeCredits.reduce((sum, c) => sum + calculateRemainingAmount(c), 0);
 
-        const selectedList = activeCredits.filter(c => liquidationSimulationIds.has(c.id));
+        const selectedList = activeCredits.filter(c => simulatedLiquidationIds.has(c.id));
         const releasedQuota = selectedList.reduce((sum, c) => sum + c.monthlyPayment, 0);
         const liquidationCost = selectedList.reduce((sum, c) => sum + calculateRemainingAmount(c), 0);
 
-        // If a globally liquidated credit is locally selected, we add its quota to the baseline 
-        // so that the futureQuota calculation (totalQuota - releasedQuota) remains accurate.
-        const locallySelectedGloballyLiquidated = selectedList.filter(c => simulatedLiquidationIds.has(c.id));
-        const adjustedTotalQuota = totalQuota + locallySelectedGloballyLiquidated.reduce((sum, c) => sum + c.monthlyPayment, 0);
-        const adjustedTotalRemaining = totalRemaining + locallySelectedGloballyLiquidated.reduce((sum, c) => sum + calculateRemainingAmount(c), 0);
-
         return {
-            totalQuota: adjustedTotalQuota,
-            totalRemaining: adjustedTotalRemaining,
+            totalQuota,
+            totalRemaining,
             releasedQuota,
             liquidationCost,
-            futureQuota: adjustedTotalQuota - releasedQuota,
-            futureRemaining: adjustedTotalRemaining - liquidationCost
+            futureQuota: totalQuota - releasedQuota,
+            futureRemaining: totalRemaining - liquidationCost
         };
-    }, [activeCredits, liquidationSimulationIds, simulatedLiquidationIds]);
+    }, [activeCredits, simulatedLiquidationIds]);
 
     const handleClearSelection = () => {
-        liquidationSimulationIds.forEach(id => toggleLiquidationSimulation(id));
+        simulatedLiquidationIds.forEach(id => toggleSimulatedLiquidation(id));
     };
 
     return (
@@ -196,73 +184,43 @@ const DebtLiquidationView: React.FC<{
                 <div className="lg:col-span-2 space-y-3">
                     <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center px-1 gap-3">
                         <h3 className="text-sm font-bold text-slate-400 uppercase">Simulación de Liquidación</h3>
-                        <div className="flex items-center gap-4">
-                            <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer hover:text-slate-200 transition-colors">
-                                <input 
-                                    type="checkbox" 
-                                    checked={showLiquidated} 
-                                    onChange={(e) => setShowLiquidated(e.target.checked)}
-                                    className="form-checkbox h-3 w-3 text-primary rounded border-slate-600 bg-slate-700 focus:ring-primary focus:ring-offset-slate-800"
-                                />
-                                Mostrar liquidados
-                            </label>
-                            <SortControls 
-                                sortKey={sortKey} 
-                                sortDir={sortDir} 
-                                onSortChange={onSortChange} 
-                                activeMethod={activeMethod}
-                                onMethodChange={onMethodChange}
-                            />
-                        </div>
+                        <SortControls 
+                            sortKey={sortKey} 
+                            sortDir={sortDir} 
+                            onSortChange={onSortChange} 
+                            activeMethod={activeMethod}
+                            onMethodChange={onMethodChange}
+                        />
                     </div>
                     
                     {activeCredits.map((credit, index) => {
-                        const isLocallySelected = liquidationSimulationIds.has(credit.id);
-                        const isGloballyLiquidated = simulatedLiquidationIds.has(credit.id);
+                        const isSelected = simulatedLiquidationIds.has(credit.id);
                         const remaining = calculateRemainingAmount(credit);
                         return (
                             <div 
                                 key={credit.id}
-                                onClick={() => toggleLiquidationSimulation(credit.id)}
+                                onClick={() => toggleSimulatedLiquidation(credit.id)}
                                 className={`group cursor-pointer p-3 rounded-lg border-2 transition-all flex items-center gap-4 ${
-                                    isLocallySelected 
-                                    ? 'bg-secondary/10 border-secondary/50 shadow-[0_0_15px_rgba(74,222,128,0.1)] opacity-100' 
-                                    : isGloballyLiquidated
-                                    ? 'bg-slate-900/40 border-slate-700/50 opacity-50'
+                                    isSelected 
+                                    ? 'bg-secondary/10 border-secondary/50 shadow-[0_0_15px_rgba(74,222,128,0.1)] opacity-70' 
                                     : 'bg-slate-800/60 border-slate-700 hover:border-slate-600'
                                 }`}
                             >
                                 <div className="flex flex-col items-center gap-1">
                                     <div className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${
-                                        isLocallySelected ? 'bg-secondary border-secondary text-black' : 'border-slate-600 group-hover:border-slate-400'
+                                        isSelected ? 'bg-secondary border-secondary text-black' : 'border-slate-600 group-hover:border-slate-400'
                                     }`}>
-                                        {isLocallySelected && <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="4"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                                        {isSelected && <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="4"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                                     </div>
-                                    {!isLocallySelected && <span className="text-[10px] font-black text-slate-500">{index + 1}º</span>}
+                                    {!isSelected && <span className="text-[10px] font-black text-slate-500">{index + 1}º</span>}
                                 </div>
                                 <div className="flex-grow min-w-0">
-                                    <div className="flex items-center gap-2">
-                                        <p className={`font-bold text-sm truncate transition-all ${isGloballyLiquidated && !isLocallySelected ? 'text-slate-500 line-through decoration-slate-500 decoration-2' : 'text-slate-200'}`}>{credit.name}</p>
-                                        {isGloballyLiquidated && (
-                                            <span className="text-[8px] uppercase font-black bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded">Liquidado</span>
-                                        )}
-                                    </div>
-                                    <p className={`text-[10px] transition-all ${isGloballyLiquidated && !isLocallySelected ? 'text-slate-600 line-through' : 'text-slate-500'}`}>{credit.subcategory} {activeMethod && <span className="text-secondary font-bold ml-1">· Prioridad #{index + 1}</span>}</p>
+                                    <p className={`font-bold text-sm truncate transition-all ${isSelected ? 'text-slate-500 line-through decoration-slate-500 decoration-2' : 'text-slate-200'}`}>{credit.name}</p>
+                                    <p className={`text-[10px] transition-all ${isSelected ? 'text-slate-600 line-through' : 'text-slate-500'}`}>{credit.subcategory} {activeMethod && <span className="text-secondary font-bold ml-1">· Prioridad #{index + 1}</span>}</p>
                                 </div>
-                                <div className="text-right flex items-center gap-3">
-                                    <div>
-                                        <p className={`text-xs font-bold transition-all ${isGloballyLiquidated && !isLocallySelected ? 'text-slate-500 line-through' : 'text-white'}`}>{formatCurrency(remaining)}</p>
-                                        <p className={`text-[10px] font-mono transition-all ${isGloballyLiquidated && !isLocallySelected ? 'text-slate-600 line-through' : 'text-danger'}`}>{formatCurrency(credit.monthlyPayment)}/mes</p>
-                                    </div>
-                                    <button 
-                                        onClick={(e) => { e.stopPropagation(); toggleSimulatedLiquidation(credit.id); }}
-                                        className={`p-2 rounded-full transition-colors border ${isGloballyLiquidated ? 'bg-secondary/20 text-secondary border-secondary/50 hover:bg-secondary/30' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-secondary/20 hover:text-secondary hover:border-secondary/50'}`}
-                                        title={isGloballyLiquidated ? "Revertir liquidación global" : "Marcar como liquidado globalmente"}
-                                    >
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    </button>
+                                <div className="text-right">
+                                    <p className={`text-xs font-bold transition-all ${isSelected ? 'text-slate-500 line-through' : 'text-white'}`}>{formatCurrency(remaining)}</p>
+                                    <p className={`text-[10px] font-mono transition-all ${isSelected ? 'text-slate-600 line-through' : 'text-danger'}`}>{formatCurrency(credit.monthlyPayment)}/mes</p>
                                 </div>
                             </div>
                         );
@@ -295,7 +253,7 @@ const DebtLiquidationView: React.FC<{
                                 </div>
                             </div>
                             
-                            {liquidationSimulationIds.size > 0 && (
+                            {simulatedLiquidationIds.size > 0 && (
                                 <div className="mt-4 p-3 bg-primary/5 rounded border border-primary/10 text-[10px] text-slate-400 italic text-center">
                                     "Liberarías {((totals.releasedQuota / totals.totalQuota) * 100).toFixed(0)}% de tu carga financiera mensual inmediata."
                                 </div>
@@ -307,7 +265,7 @@ const DebtLiquidationView: React.FC<{
                         onClick={handleClearSelection} 
                         variant="ghost" 
                         className="w-full text-xs uppercase font-bold text-slate-500"
-                        disabled={liquidationSimulationIds.size === 0}
+                        disabled={simulatedLiquidationIds.size === 0}
                     >
                         Limpiar Selección
                     </Button>
@@ -326,14 +284,13 @@ const DebtBarChart: React.FC<{
     onMethodChange: (method: MethodType) => void;
 }> = ({ sortKey, sortDir, onSortChange, activeMethod, onMethodChange }) => {
     const { credits, simulatedLiquidationIds, toggleSimulatedLiquidation } = useApp();
-    const [showLiquidated, setShowLiquidated] = useState(false);
 
     const activeCredits = useMemo(() => {
-        const list = showLiquidated ? credits : credits.filter(c => calculateRemainingAmount(c) > 0);
+        const list = credits.filter(c => calculateRemainingAmount(c) > 0);
         return sortCredits(list, sortKey, sortDir, activeMethod);
-    }, [credits, sortKey, sortDir, activeMethod, showLiquidated]);
+    }, [credits, sortKey, sortDir, activeMethod]);
 
-    if (activeCredits.length === 0 && !showLiquidated) return null;
+    if (activeCredits.length === 0) return null;
 
     return (
         <Card className="mb-6 !p-4 bg-slate-800/30 border border-slate-700/50 shadow-2xl">
@@ -343,15 +300,6 @@ const DebtBarChart: React.FC<{
                     Estado de Deudas y Cuotas
                 </h2>
                 <div className="flex flex-wrap items-center gap-4">
-                    <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer hover:text-slate-200 transition-colors">
-                        <input 
-                            type="checkbox" 
-                            checked={showLiquidated} 
-                            onChange={(e) => setShowLiquidated(e.target.checked)}
-                            className="form-checkbox h-3 w-3 text-primary rounded border-slate-600 bg-slate-700 focus:ring-primary focus:ring-offset-slate-800"
-                        />
-                        Mostrar liquidados
-                    </label>
                     <SortControls 
                         sortKey={sortKey} 
                         sortDir={sortDir} 
@@ -393,23 +341,12 @@ const DebtBarChart: React.FC<{
                                         <p className="text-[10px] text-slate-500 font-medium">{credit.subcategory} {activeMethod && !isSelected && <span className="text-secondary font-black ml-1">#{index + 1}</span>}</p>
                                     </div>
                                 </div>
-                                <div className="text-right flex items-center gap-3">
-                                    <div>
-                                        <div className="flex items-baseline justify-end gap-1">
-                                            <span className="text-[10px] text-slate-400 font-bold uppercase">Cuota</span>
-                                            <span className={`font-black text-lg transition-all ${isSelected ? 'text-slate-600 line-through' : 'text-danger'}`}>€{credit.monthlyPayment.toFixed(2)}</span>
-                                        </div>
-                                        <p className={`text-[10px] font-mono transition-all ${isSelected ? 'text-slate-600 line-through' : 'text-slate-500'}`}>Pendiente: {formatCurrency(remaining)}</p>
+                                <div className="text-right">
+                                    <div className="flex items-baseline justify-end gap-1">
+                                        <span className="text-[10px] text-slate-400 font-bold uppercase">Cuota</span>
+                                        <span className={`font-black text-lg transition-all ${isSelected ? 'text-slate-600 line-through' : 'text-danger'}`}>€{credit.monthlyPayment.toFixed(2)}</span>
                                     </div>
-                                    <button 
-                                        onClick={(e) => { e.stopPropagation(); toggleSimulatedLiquidation(credit.id); }}
-                                        className={`p-2 rounded-full transition-colors border ${isSelected ? 'bg-secondary/20 text-secondary border-secondary/50 hover:bg-secondary/30' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-secondary/20 hover:text-secondary hover:border-secondary/50'}`}
-                                        title={isSelected ? "Revertir liquidación" : "Simular liquidación"}
-                                    >
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    </button>
+                                    <p className={`text-[10px] font-mono transition-all ${isSelected ? 'text-slate-600 line-through' : 'text-slate-500'}`}>Pendiente: {formatCurrency(remaining)}</p>
                                 </div>
                             </div>
                             
@@ -827,14 +764,13 @@ const DebtRatioSummary: React.FC<{ simulatedPaidIds?: Set<string> }> = ({ simula
 };
 
 
-const CreditsSummary: React.FC<{ simulatedPaidIds?: Set<string> }> = ({ simulatedPaidIds }) => {
+const CreditsSummary: React.FC = () => {
     const { credits } = useApp();
 
     const summaryData = useMemo(() => {
-        const activeCredits = credits.filter(c => !simulatedPaidIds?.has(c.id));
-        const cardCredits = activeCredits.filter(c => c.subcategory === 'Tarjeta');
-        const loanCredits = activeCredits.filter(c => c.subcategory === 'Préstamo' || c.subcategory === 'Financiación');
-        const mortgageCredits = activeCredits.filter(c => c.subcategory === 'Hipoteca');
+        const cardCredits = credits.filter(c => c.subcategory === 'Tarjeta');
+        const loanCredits = credits.filter(c => c.subcategory === 'Préstamo' || c.subcategory === 'Financiación');
+        const mortgageCredits = credits.filter(c => c.subcategory === 'Hipoteca');
 
         const totalCardDebt = cardCredits.reduce((sum, c) => sum + calculateRemainingAmount(c), 0);
         const totalCardMonthly = cardCredits.reduce((sum, c) => sum + c.monthlyPayment, 0);
@@ -846,10 +782,10 @@ const CreditsSummary: React.FC<{ simulatedPaidIds?: Set<string> }> = ({ simulate
         const totalMortgageMonthly = mortgageCredits.reduce((sum, c) => sum + c.monthlyPayment, 0);
 
         return {
-            totalCount: activeCredits.length, cardCount: cardCredits.length, loanCount: loanCredits.length, mortgageCount: mortgageCredits.length,
+            totalCount: credits.length, cardCount: cardCredits.length, loanCount: loanCredits.length, mortgageCount: mortgageCredits.length,
             totalCardDebt, totalCardMonthly, totalLoanDebt, totalLoanMonthly, totalMortgageDebt, totalMortgageMonthly,
         };
-    }, [credits, simulatedPaidIds]);
+    }, [credits]);
 
     const StatCard: React.FC<{title: string; value: number}> = ({ title, value }) => (
         <div className="bg-slate-700/50 p-3 rounded-lg">
@@ -1199,7 +1135,7 @@ const AddCreditModal: React.FC<{ isOpen: boolean; onClose: () => void; creditToE
 type SortKey = keyof Credit | 'remainingAmount' | 'ratio';
 
 const CreditsPage: React.FC = () => {
-    const { credits, deleteCredit, users, activeView, simulatedLiquidationIds, toggleSimulatedLiquidation } = useApp();
+    const { credits, deleteCredit, users, activeView, simulatedLiquidationIds } = useApp();
     const location = useLocation();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [creditToEdit, setCreditToEdit] = useState<Credit | null>(null);
@@ -1212,21 +1148,6 @@ const CreditsPage: React.FC = () => {
     const [globalSortKey, setGlobalSortKey] = useState<SortKeyType>('capital');
     const [globalSortDir, setGlobalSortDir] = useState<'asc' | 'desc'>('desc');
     const [globalMethod, setGlobalMethod] = useState<MethodType>(null);
-
-    // Local state for the Liquidar tab simulation
-    const [liquidationSimulationIds, setLiquidationSimulationIds] = useState<Set<string>>(new Set());
-
-    const toggleLiquidationSimulation = (id: string) => {
-        setLiquidationSimulationIds(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(id)) {
-                newSet.delete(id);
-            } else {
-                newSet.add(id);
-            }
-            return newSet;
-        });
-    };
 
     useEffect(() => {
         const params = new URLSearchParams(location.search);
@@ -1381,7 +1302,7 @@ const CreditsPage: React.FC = () => {
             {/* Using the global simulatedLiquidationIds directly inside DebtRatioSummary now */}
             <DebtRatioSummary simulatedPaidIds={simulatedLiquidationIds} />
             
-            <CreditsSummary simulatedPaidIds={simulatedLiquidationIds} />
+            <CreditsSummary />
 
             {/* DebtBarChart connects to global context internally via useApp hook updates in its implementation, 
                 but for clarity we pass the global toggle. The component implementation was updated to use context.
@@ -1449,10 +1370,6 @@ const CreditsPage: React.FC = () => {
                                 onSortChange={(k, d) => { setGlobalSortKey(k); setGlobalSortDir(d); }}
                                 activeMethod={globalMethod}
                                 onMethodChange={setGlobalMethod}
-                                liquidationSimulationIds={liquidationSimulationIds}
-                                toggleLiquidationSimulation={toggleLiquidationSimulation}
-                                simulatedLiquidationIds={simulatedLiquidationIds}
-                                toggleSimulatedLiquidation={toggleSimulatedLiquidation}
                             />
                         ) : (
                             <Card className="text-center py-12">
